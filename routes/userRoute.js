@@ -14,11 +14,11 @@ router.post('/register', async(req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        request.body.password = hashedPassword;
+        req.body.password = hashedPassword;
 
         const newUser = new User(req.body);
 
-        await newUser.save(); //saves document in mongodb
+        newUser.save(); //saves document in mongodb
         res.status(200).send({message:'User created succefully', success: true})
    
     } catch (error) {
