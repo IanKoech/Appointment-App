@@ -19,7 +19,7 @@ router.post('/register', async(req, res) => {
 
         const newUser = new User(req.body);
 
-        newUser.save(); //saves document in mongodb
+        await newUser.save(); //saves document in mongodb
         res.status(200).send({message:'User created succefully', success: true})
    
     } catch (error) {
