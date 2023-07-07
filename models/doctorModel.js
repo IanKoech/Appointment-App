@@ -37,13 +37,13 @@ const doctorSchema = new mongoose.Schema(
             type: Number,
             required: true
         },
-        consultationHours: {
-            type: Object,
-            required: true
-        },
         timings: {
             type: Array,
             required: true
+        },
+        status: {
+            type: String,
+            default: 'pending'
         }
     },
     {
@@ -51,4 +51,6 @@ const doctorSchema = new mongoose.Schema(
     }
 );
 
-const doctorModel = mongoose.Model('doctors', doctorSchema);
+const doctorModel = mongoose.model('doctors', doctorSchema);
+
+module.exports = doctorModel;
