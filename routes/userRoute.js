@@ -128,7 +128,7 @@ router.post('/delete-all-notifications', authMiddleware, async(req, res) => {
        
        res.status(200).send({
         success: true,
-        message: 'All notifications marked are deleted'
+         
        });
     } catch (error) {
         console.log(error)
