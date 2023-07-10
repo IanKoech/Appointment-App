@@ -73,6 +73,7 @@ router.post('/apply-doctor-account', authMiddleware, async(req, res) => {
         await newDoctor.save();
         const adminUser = await User.findOne({ isAdmin: true });
         console.log('Showing new doctor ',newDoctor);
+        
         const unseenNotifications = adminUser.unseenNotifications;
         unseenNotifications.push({
             type: 'new-doctor-request',
