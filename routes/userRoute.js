@@ -81,6 +81,38 @@ router.post("/get-user-by-id", authMiddleware, async (req, res) => {
   }
 });
 
+router.post('/update-user-profile', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.body.userId });
+
+    if(!user){
+      res.status(200).send({ message: 'User does not exist', success: false });
+    } else{
+        user.firstName = req.body.firstName;
+        user.lastName = req.body.lastName;
+        user.email = req.body.email;
+        user.password = req.body.password;
+
+        //saving upadted user data
+        const updatedUser = user.save();
+
+        //sending success response with updated user data
+        res.status(200).send({
+          message: "User profile updated successfully",
+          success: true,
+          data: updatedUser
+        })
+    }
+
+  } catch (error) {
+    console.log('User profile updated successfully');
+    res.status(500).send({
+      message: 'Error updating user profile',
+      success: false
+    })
+  }
+})
+
 router.post("/apply-doctor-account", authMiddleware, async (req, res) => {
   try {
     const newDoctor = new Doctor({ ...req.body, status: "pending" });
