@@ -37,7 +37,7 @@ router.post("/login", async (req, res) => {
     const user = await User.findOne({ email: req.body.email });
     if (!user) {
       return res
-        .status(200)
+        .status(404)
         .send({ message: "User does not exist", success: false });
     }
     const isMatch = await bcrypt.compare(req.body.password, user.password); //compares encrypted password
@@ -65,7 +65,7 @@ router.post("/get-user-by-id", authMiddleware, async (req, res) => {
     user.password = undefined;
     console.log(user);
     if (!user) {
-      req.status(200).send({ message: "User does not exist", success: false });
+      req.status(404).send({ message: "User does not exist", success: false });
     } else {
       res.status(200).send({
         success: true,
@@ -86,7 +86,7 @@ router.post('/update-user-profile', authMiddleware, async (req, res) => {
     const user = await User.findOne({ _id: req.body.userId });
 
     if(!user){
-      res.status(200).send({ message: 'User does not exist', success: false });
+      res.status(400).send({ message: 'User does not exist', success: false });
     } else{
         user.firstName = req.body.firstName;
         user.lastName = req.body.lastName;
@@ -94,7 +94,7 @@ router.post('/update-user-profile', authMiddleware, async (req, res) => {
         user.password = req.body.password;
 
         //saving upadted user data
-        const updatedUser = user.save();
+        const updatedUser = await user.save();
 
         //sending success response with updated user data
         res.status(200).send({
@@ -105,7 +105,7 @@ router.post('/update-user-profile', authMiddleware, async (req, res) => {
     }
 
   } catch (error) {
-    console.log('User profile updated successfully');
+    console.log('User profile updated successfully : ',error);
     res.status(500).send({
       message: 'Error updating user profile',
       success: false
