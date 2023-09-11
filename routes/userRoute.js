@@ -83,33 +83,24 @@ router.post("/get-user-by-id", authMiddleware, async (req, res) => {
 
 router.post('/update-user-profile', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findOne({ _id: req.body.userId });
-
-    if(!user){
-      res.status(400).send({ message: 'User does not exist', success: false });
-    } else{
-        user.firstName = req.body.firstName;
-        user.lastName = req.body.lastName;
-        user.email = req.body.email;
-        user.password = req.body.password;
-
-        //saving upadted user data
-        const updatedUser = await user.save();
-
-        //sending success response with updated user data
-        res.status(200).send({
-          message: "User profile updated successfully",
-          success: true,
-          data: updatedUser
-        })
-    }
-
+    const updatedUser = await User.findOneAndUpdate(
+      {
+      userId: req.body.userId
+      },
+      req.body,
+      {new: true} //Returns the updated document
+    );
+    res.status(200).send({
+      success: true,
+      message: 'User profile updated successfully',
+      data: updatedUser
+    });
   } catch (error) {
-    console.log('User profile updated successfully : ',error);
     res.status(500).send({
       message: 'Error updating user profile',
-      success: false
-    })
+      success: false,
+      error
+    });
   }
 })
 
