@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 const authMiddleware = require("../middlewares/authMiddleware");
 const Doctor = require("../models/doctorModel");
 const Appointment = require("../models/appointmentModel");
-const moment = require('moment');
+const moment = require("moment");
 
 router.post("/register", async (req, res) => {
   try {
@@ -81,28 +81,29 @@ router.post("/get-user-by-id", authMiddleware, async (req, res) => {
   }
 });
 
-router.post('/update-user-profile', authMiddleware, async (req, res) => {
+router.post("/update-user-profile", authMiddleware, async (req, res) => {
   try {
     const updatedUser = await User.findOneAndUpdate(
       {
-      userId: req.body.userId
+        _id: req.body.userId,
       },
       req.body,
-      {new: true} //Returns the updated document
+      { new: true } //Returns the updated document
     );
     res.status(200).send({
       success: true,
-      message: 'User profile updated successfully',
-      data: updatedUser
+      message: "User profile updated successfully",
+      data: updatedUser,
     });
+    console.log("Upated user details : ", updatedUser);
   } catch (error) {
     res.status(500).send({
-      message: 'Error updating user profile',
+      message: "Error updating user profile",
       success: false,
-      error
+      error,
     });
   }
-})
+});
 
 router.post("/apply-doctor-account", authMiddleware, async (req, res) => {
   try {
@@ -231,7 +232,7 @@ router.post("/check-booking-avilability", authMiddleware, async (req, res) => {
   try {
     const date = moment(req.body.date, "DD-MM-YYYY").toISOString();
     const fromTime = moment(req.body.time, "HH:mm")
-      .subtract(1, "hours") 
+      .subtract(1, "hours")
       .toISOString();
     const toTime = moment(req.body.time, "HH:mm").add(1, "hours").toISOString();
     const doctorId = req.body.doctorId;
@@ -280,4 +281,3 @@ router.get("/get-appointments-by-user-id", authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-
