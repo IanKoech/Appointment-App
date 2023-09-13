@@ -83,6 +83,11 @@ router.post("/get-user-by-id", authMiddleware, async (req, res) => {
 
 router.post("/update-user-profile", authMiddleware, async (req, res) => {
   try {
+    const password = req.body.password;
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    req.body.password = hashedPassword;
+
     const updatedUser = await User.findOneAndUpdate(
       {
         _id: req.body.userId,
@@ -97,6 +102,7 @@ router.post("/update-user-profile", authMiddleware, async (req, res) => {
     });
     console.log("Upated user details : ", updatedUser);
   } catch (error) {
+    console.log('Update profile error is : ', error);
     res.status(500).send({
       message: "Error updating user profile",
       success: false,
