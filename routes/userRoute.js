@@ -210,13 +210,13 @@ router.post("/book-appointment", authMiddleware, async (req, res) => {
   try {
     req.body.status = "pending";
     const newAppointment = new Appointment(req.body);
+    console.log("Updated request name, not object ",req.body.userInfo._doc.name);
     await newAppointment.save();
     //pushing notification to doctor based on his userid
     const user = await User.findOne({ _id: req.body.doctorInfo.userId });
-    // const patient = await User.findOne({ _id: req.body.userInfo._id})
     user.unseenNotifications.push({
       type: "new-appointment-request",
-      message: `${req.body.userInfo.email} has sent a request `,
+      message: `${req.body.userInfo._doc.name} has sent an appointment request `,
       onClickPath: "/doctor/appointments",
     });
     await user.save();
