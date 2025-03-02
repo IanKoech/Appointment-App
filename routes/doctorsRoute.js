@@ -56,7 +56,8 @@ router.get(
   authMiddleware,
   async (req, res) => {
     try {
-      const doctor = await Doctor.findOne({ userId: req.body.userId });
+      const doctor = await Doctor.findOne({ userId: req.user.userId });
+      console.log('Check for request content :',req);
       const appointments = await Appointment.find({ doctorId: doctor._id });
       res.status(200).send({
         message: "Appointments fetched successfully",

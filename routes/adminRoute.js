@@ -72,4 +72,22 @@ router.post(
   }
 );
 
+router.post("/add-phone-number-field", authMiddleware, async (req, res) => {
+  try {
+    await User.updateMany({}, { $set: { phoneNumber: '' } });
+
+    res.status(200).send({
+      message: "Phone number field added to all users successfully",
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      message: "Error updating users",
+      success: false,
+    });
+  }
+});
+
+
 module.exports = router;
