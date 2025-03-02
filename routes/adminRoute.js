@@ -89,5 +89,21 @@ router.post("/add-phone-number-field", authMiddleware, async (req, res) => {
   }
 });
 
+router.post("/add-till-number", authMiddleware, async (req, res) => {
+  try {
+    await Doctor.updateMany({}, { $set: { tillNumber: 12345 } });
+    res.status(200).send({
+      message: "Till number added to all doctors successfully",
+      success: true,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      message: "Error updating doctors",
+      success: false,
+    })
+  }
+});
+
 
 module.exports = router;
