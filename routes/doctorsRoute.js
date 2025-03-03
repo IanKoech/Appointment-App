@@ -1,7 +1,7 @@
-const express = require("express");
+import express from "express";
 const router = express.Router();
-const Doctor = require("../models/doctorModel");
-const authMiddleware = require("../middlewares/authMiddleware");
+import Doctor from "../models/doctorModel.js";
+import authMiddleware from "../middlewares/authMiddleware.js";
 
 router.post("/get-doctor-info-by-user-id", authMiddleware, async (req, res) => {
   try {
@@ -75,4 +75,5 @@ router.get(
   }
 );
 
-module.exports = router;
+// module.exports = router;
+export default router;

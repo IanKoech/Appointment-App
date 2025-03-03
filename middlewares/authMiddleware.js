@@ -1,27 +1,25 @@
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 
-module.exports = async (req, res, next) => {
-    //checks validity of token 
+const authMiddleware = async (req, res, next) => {
     try {
         const token = req.headers['authorization'].split(' ')[1];
         jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-        if(err){
-            return res.status(401).send(
-                {
+            if (err) {
+                return res.status(401).json({
                     message: 'Authorization failed',
                     success: false
-                 }
-            );
-        }else{
-            req.body.userId = decoded.id;
-            next(); 
-        }
-    })
+                });
+            } else {
+                req.body.userId = decoded.id;
+                next();
+            }
+        });
     } catch (error) {
-       return res.status(401).send({
+        return res.status(401).json({
             message: 'Auth failed',
-            success: false 
-       });
+            success: false
+        });
     }
-    
-}
+};
+
+export default authMiddleware;

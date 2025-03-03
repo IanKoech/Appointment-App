@@ -1,76 +1,79 @@
-const express = require("express");
+import express from "express";
 const router = express.Router();
-const User = require("../models/userModel");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const authMiddleware = require("../middlewares/authMiddleware");
-const Doctor = require("../models/doctorModel");
-const Appointment = require("../models/appointmentModel");
-const moment = require("moment");
+import axios from "axios";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import moment from "moment";
+import User from "../models/userModel.js";
+import authMiddleware from "../middlewares/authMiddleware.js";
+import Doctor from "../models/doctorModel.js";
+import Appointment from "../models/appointmentModel.js";
 
 const consumerKey = process.env.MPESA_CONSUMER_KEY;
 const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
 
-const generateAccessToken = async (consumerKey, consumerSecret) => {
+const generateAccessToken = async () => {
+  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString(
+    "base64"
+  );
+
   try {
-    const response = await axios.get(
-      "https://api.safaricom.co.ke/oauth/v1/generate",
+    const response = await axios.post(
+      "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      {}, // Empty body for POST request
       {
-        auth: {
-          username: consumerKey,
-          password: consumerSecret,
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/json",
         },
       }
     );
+
+    console.log("Access Token:", response.data.access_token);
     return response.data.access_token;
   } catch (error) {
+    console.error(
+      "Error generating access token:",
+      error.response?.data || error.message
+    );
     throw error;
   }
 };
 
-router.post("/lipa", async (req, res) => {
+router.post("/payment-request", async (req, res) => {
   try {
-    // Generate an access token for authentication
-    const accessToken = await generateAccessToken(consumerKey, consumerSecret);
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-:T.Z]/g, "")
+      .slice(0, -3); // Ensure timestamp is in the correct format
+    const accessToken = await generateAccessToken(); // Ensure correct token generation
 
-    // Create the payment request
+    console.log("Access Token:", accessToken);
+    console.log("Request from frontend hapa::", req.body);
+
+    // Generate the password
+    const businessShortCode = req.body.BusinessShortCode;
+    const passkey = "YOUR_PASSKEY_HERE"; // Replace with your actual passkey
+    const password = Buffer.from(
+      `${businessShortCode}${passkey}${timestamp}`
+    ).toString("base64");
+
     const paymentRequest = {
-      BusinessShortCode: "YOUR_BUSINESS_SHORTCODE",
-      Password: "YOUR_PASSWORD", // Generate this using Daraja documentation
-      Timestamp: generateTimestamp(), // Format: YYYYMMDDHHmmss
+      BusinessShortCode: businessShortCode,
+      Password: password,
+      Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
-      Amount: req.body.amount,
-      PartyA: req.body.phone, // Customer's phone number
-      PartyB: "YOUR_BUSINESS_SHORTCODE",
-      PhoneNumber: req.body.phone,
-      CallBackURL: "YOUR_CALLBACK_URL",
-      AccountReference: "YOUR_ORDER_ID",
-      TransactionDesc: "Payment for Order",
+      Amount: req.body.Amount,
+      PartyA: req.body.PhoneNumber,
+      PartyB: businessShortCode,
+      PhoneNumber: req.body.PhoneNumber,
+      CallBackURL: "https://005b-41-80-115-28.ngrok-free.app/", // Replace with your actual callback URL
+      AccountReference: req.body.AccountReference,
+      TransactionDesc: req.body.TransactionDesc || "Booking",
     };
 
-    // Make the payment request
-    const paymentResponse = await initiatePayment(accessToken, paymentRequest);
-
-    // Handle the payment response as needed
-    console.log(paymentResponse);
-
-    res
-      .status(200)
-      .json({
-        message: "Payment initiated successfully",
-        data: paymentResponse,
-      });
-  } catch (error) {
-    console.error("Error initiating payment:", error);
-    res.status(500).json({ message: "Payment initiation failed" });
-  }
-});
-
-// Function to initiate the Lipa Na M-Pesa payment
-const initiatePayment = async (accessToken, paymentRequest) => {
-  try {
     const response = await axios.post(
-      "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
       paymentRequest,
       {
         headers: {
@@ -79,15 +82,27 @@ const initiatePayment = async (accessToken, paymentRequest) => {
         },
       }
     );
-    return response.data;
+
+    console.log("Payment Response:", response.data);
+    res.status(200).json({
+      success: true,
+      message: "Payment initiated successfully",
+      data: response.data,
+    });
   } catch (error) {
     console.error(
-      "Error in payment request:",
+      "Error initiating payment:",
       error.response?.data || error.message
     );
-    throw error;
+    res.status(500).json({
+      success: false,
+      message: "Payment initiation failed",
+      error: error.response?.data || error.message,
+    });
   }
-};
+});
+
+
 
 router.post("/register", async (req, res) => {
   try {
@@ -122,6 +137,7 @@ router.post("/login", async (req, res) => {
         .send({ message: "User does not exist", success: false });
     }
     const isMatch = await bcrypt.compare(req.body.password, user.password); //compares encrypted password
+    console.log(isMatch);
     if (!isMatch) {
       res
         .status(200)
@@ -366,4 +382,5 @@ router.get("/get-appointments-by-user-id", authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+// module.exports = router;
+export default router;
