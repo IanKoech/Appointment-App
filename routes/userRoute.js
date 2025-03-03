@@ -11,6 +11,7 @@ import Appointment from "../models/appointmentModel.js";
 
 const consumerKey = process.env.MPESA_CONSUMER_KEY;
 const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+const passKey = process.env.MPESA_PASS_KEY;
 
 const generateAccessToken = async () => {
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString(
@@ -29,8 +30,8 @@ const generateAccessToken = async () => {
       }
     );
 
-    console.log("Access Token:", response.data.access_token);
-    return response.data.access_token;
+    console.log("Access Token Response:", response.data);
+    return response.data.access_token; // Return the access token
   } catch (error) {
     console.error(
       "Error generating access token:",
@@ -45,22 +46,23 @@ router.post("/payment-request", async (req, res) => {
     const timestamp = new Date()
       .toISOString()
       .replace(/[-:T.Z]/g, "")
-      .slice(0, -3); // Ensure timestamp is in the correct format
-    const accessToken = await generateAccessToken(); // Ensure correct token generation
+      .slice(0, -3); // Format: YYYYMMDDHHmmss
+
+    // Generate the password
+    const businessShortCode = req.body.BusinessShortCode;
+    const password = Buffer.from(
+      `${businessShortCode}${passKey}${timestamp}`
+    ).toString("base64");
+
+    // Get the access token
+    const accessToken = await generateAccessToken();
 
     console.log("Access Token:", accessToken);
     console.log("Request from frontend hapa::", req.body);
 
-    // Generate the password
-    const businessShortCode = req.body.BusinessShortCode;
-    const passkey = "YOUR_PASSKEY_HERE"; // Replace with your actual passkey
-    const password = Buffer.from(
-      `${businessShortCode}${passkey}${timestamp}`
-    ).toString("base64");
-
     const paymentRequest = {
       BusinessShortCode: businessShortCode,
-      Password: password,
+      Password: password, // Use the generated password
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
       Amount: req.body.Amount,
@@ -77,7 +79,7 @@ router.post("/payment-request", async (req, res) => {
       paymentRequest,
       {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`, // Use the access token here
           "Content-Type": "application/json",
         },
       }
@@ -101,8 +103,6 @@ router.post("/payment-request", async (req, res) => {
     });
   }
 });
-
-
 
 router.post("/register", async (req, res) => {
   try {
