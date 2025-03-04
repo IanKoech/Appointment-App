@@ -4,6 +4,7 @@ import axios from "axios";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import moment from "moment";
+import { Buffer } from "buffer";
 import User from "../models/userModel.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import Doctor from "../models/doctorModel.js";
@@ -12,17 +13,17 @@ import Appointment from "../models/appointmentModel.js";
 const consumerKey = process.env.MPESA_CONSUMER_KEY;
 const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
 const passKey = process.env.MPESA_PASS_KEY;
+const businessShortCode = 174379;
 
 const generateAccessToken = async () => {
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString(
-    "base64"
-  );
-
   try {
-    const response = await axios.post(
+    const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString(
+      "base64"
+    );
+    const response = await fetch(
       "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
-      {}, // Empty body for POST request
       {
+        method: "GET",
         headers: {
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/json",
@@ -30,8 +31,16 @@ const generateAccessToken = async () => {
       }
     );
 
-    console.log("Access Token Response:", response.data);
-    return response.data.access_token; // Return the access token
+    if (response.ok) {
+      const data = await response.json();
+      const token = data.access_token;
+      console.log("The token from the fucking response ::::", data);
+
+      console.log("Access Token Response:", token);
+      return token; // Return the access token
+    } else {
+      console.log("error ", response);
+    }
   } catch (error) {
     console.error(
       "Error generating access token:",
@@ -40,69 +49,70 @@ const generateAccessToken = async () => {
     throw error;
   }
 };
-
 router.post("/payment-request", async (req, res) => {
   try {
+    // const { phoneNumber, amount } = req.body;
+
+    console.log("Log the entire request:::", req);
+    // if (!phoneNumber || !amount) {
+    //   return res
+    //     .status(400)
+    //     .json({ error: "Phone number and amount are required" });
+    // }
+
+    const accessToken = await generateAccessToken();
+    console.log("Access token in the route :", accessToken);
     const timestamp = new Date()
       .toISOString()
-      .replace(/[-:T.Z]/g, "")
-      .slice(0, -3); // Format: YYYYMMDDHHmmss
-
-    // Generate the password
-    const businessShortCode = req.body.BusinessShortCode;
+      .replace(/[-:T]/g, "")
+      .split(".")[0];
     const password = Buffer.from(
       `${businessShortCode}${passKey}${timestamp}`
     ).toString("base64");
 
-    // Get the access token
-    const accessToken = await generateAccessToken();
-
-    console.log("Access Token:", accessToken);
-    console.log("Request from frontend hapa::", req.body);
-
-    const paymentRequest = {
+    const requestData = {
       BusinessShortCode: businessShortCode,
-      Password: password, // Use the generated password
+      Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
-      Amount: req.body.Amount,
-      PartyA: req.body.PhoneNumber,
+      Amount: 1,
+      PartyA: "254768548261",
       PartyB: businessShortCode,
-      PhoneNumber: req.body.PhoneNumber,
-      CallBackURL: "https://005b-41-80-115-28.ngrok-free.app/", // Replace with your actual callback URL
-      AccountReference: req.body.AccountReference,
-      TransactionDesc: req.body.TransactionDesc || "Booking",
+      PhoneNumber: "254768548261",
+      CallBackURL: "https://8546-41-139-250-173.ngrok-free.app",
+      AccountReference: "TestPayment",
+      TransactionDesc: "Payment for order #123",
     };
 
-    const response = await axios.post(
+    const stkResponse = await fetch(
       "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-      paymentRequest,
       {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${accessToken}`, // Use the access token here
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify(requestData),
       }
     );
 
-    console.log("Payment Response:", response.data);
-    res.status(200).json({
-      success: true,
-      message: "Payment initiated successfully",
-      data: response.data,
-    });
+    const responseText = await stkResponse.text();
+
+    if (stkResponse.ok) {
+      console.log("STK Push Response:", responseText);
+    } else {
+      console.error("error in stkresponse",responseText)
+    } 
+
+    const responseData = await stkResponse.json();
+    res.json(responseData);
   } catch (error) {
-    console.error(
-      "Error initiating payment:",
-      error.response?.data || error.message
-    );
-    res.status(500).json({
-      success: false,
-      message: "Payment initiation failed",
-      error: error.response?.data || error.message,
-    });
+    console.error("STK Push Error:", error.message);
+    res.status(500).json({ error: "STK Push failed" });
   }
 });
+
+
 
 router.post("/register", async (req, res) => {
   try {
