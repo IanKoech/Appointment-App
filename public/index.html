@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Book appointments with trusted doctors and manage care requests."
+    />
+    <title>CareSlot Appointments</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="app-shell" id="authView">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="CareSlot home">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span>
+          </span>
+          <span>
+            <strong>CareSlot</strong>
+            <small>Appointments</small>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="Primary">
+          <a href="#doctors">Doctors</a>
+          <a href="#schedule">Schedule</a>
+          <a href="#account">Account</a>
+        </nav>
+        <button class="ghost-button" id="refreshButton" type="button">Refresh</button>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow">Fast clinical booking</p>
+            <h1 id="hero-title">Find the right doctor and reserve a slot in minutes.</h1>
+            <p class="hero-text">
+              Browse approved specialists, compare fees and availability, then send appointment requests from one clean workspace.
+            </p>
+            <div class="hero-actions">
+              <a class="primary-button" href="#doctors">Find a doctor</a>
+              <a class="secondary-button" href="#account">Manage profile</a>
+            </div>
+          </div>
+          <form class="auth-panel hero-account" id="account" aria-label="Account form">
+            <div class="tabs" role="tablist" aria-label="Account action">
+              <button class="tab active" type="button" data-mode="login">Login</button>
+              <button class="tab" type="button" data-mode="register">Register</button>
+            </div>
+            <div class="form-grid">
+              <label data-register-only>
+                Name
+                <input name="name" autocomplete="name" />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" autocomplete="email" required />
+              </label>
+              <label data-register-only>
+                Phone
+                <input name="phoneNumber" autocomplete="tel" />
+              </label>
+              <label>
+                Password
+                <span class="password-field">
+                  <input name="password" type="password" autocomplete="current-password" required />
+                  <button class="password-toggle" id="passwordToggle" type="button" aria-label="Show password" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
+                </span>
+              </label>
+              <label class="hidden" data-otp-only>
+                Verification code
+                <input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
+              </label>
+            </div>
+            <button class="primary-button full" type="submit" id="accountButton">Login</button>
+            <button class="text-button hidden" type="button" id="resendOtpButton">Resend code</button>
+            <p class="form-status" id="accountStatus" role="status"></p>
+          </form>
+        </section>
+
+        <section class="workspace" id="doctors">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Doctor discovery</p>
+              <h2>Available specialists</h2>
+            </div>
+            <label class="search-field">
+              <span>Search</span>
+              <input id="doctorSearch" type="search" placeholder="Name, specialty, location" autocomplete="off" />
+            </label>
+          </div>
+          <div class="doctor-grid" id="doctorGrid" aria-live="polite"></div>
+        </section>
+
+        <section class="split-section" id="schedule">
+          <div class="schedule-panel">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Next steps</p>
+                <h2>Booking workflow</h2>
+              </div>
+            </div>
+            <ol class="steps">
+              <li><span>1</span>Choose an approved doctor.</li>
+              <li><span>2</span>Select date, time, and explain the visit.</li>
+              <li><span>3</span>Submit and watch notifications for status changes.</li>
+            </ol>
+          </div>
+
+          <aside class="live-panel" aria-label="Today overview">
+            <div class="pulse-dot"></div>
+            <span class="panel-label">Clinic flow</span>
+            <strong id="doctorCount">0 approved doctors</strong>
+            <div class="mini-chart" aria-hidden="true">
+              <span style="height: 34%"></span>
+              <span style="height: 58%"></span>
+              <span style="height: 42%"></span>
+              <span style="height: 76%"></span>
+              <span style="height: 63%"></span>
+              <span style="height: 88%"></span>
+            </div>
+            <p id="apiState">Checking API connection...</p>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <section class="dashboard hidden" id="appView" aria-label="Patient dashboard">
+      <aside class="sidebar">
+        <a class="brand sidebar-brand" href="/" aria-label="CareSlot dashboard">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span>
+          </span>
+          <span>
+            <strong>CareSlot</strong>
+            <small>My care</small>
+          </span>
+        </a>
+
+        <nav class="side-nav" aria-label="Dashboard">
+          <button class="side-link active" type="button" data-dashboard-tab="home">
+            <span>Home</span>
+          </button>
+          <button class="side-link" type="button" data-dashboard-tab="doctors" data-role-menu="patient">
+            <span>Find care</span>
+          </button>
+          <button class="side-link" type="button" data-dashboard-tab="appointments" data-role-menu="patient">
+            <span>My visits</span>
+          </button>
+          <button class="side-link" type="button" data-dashboard-tab="notifications">
+            <span>Updates</span>
+          </button>
+          <button class="side-link" type="button" data-dashboard-tab="profile">
+            <span>Profile</span>
+          </button>
+          <button class="side-link" type="button" data-dashboard-tab="practitioner" data-role-menu="patient">
+            <span>Practitioner</span>
+          </button>
+          <button class="side-link hidden" type="button" data-role-menu="admin" data-dashboard-tab="admin">
+            <span>Admin review</span>
+          </button>
+          <button class="side-link hidden" type="button" data-role-menu="admin" data-dashboard-tab="analytics">
+            <span>Analytics</span>
+          </button>
+          <button class="side-link hidden" type="button" data-role-menu="admin" data-dashboard-tab="monitoring">
+            <span>Monitoring</span>
+          </button>
+          <button class="side-link hidden" type="button" data-role-menu="admin" data-dashboard-tab="users">
+            <span>Users</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-account">
+          <span class="avatar" id="sidebarAvatar">U</span>
+          <div>
+            <strong id="sidebarUserName">Signed in</strong>
+            <small id="accountChip">user@example.com</small>
+          </div>
+        </div>
+        <button class="logout-button" id="logoutButton" type="button">Logout</button>
+      </aside>
+
+      <main class="dashboard-main">
+        <header class="dashboard-header">
+          <div>
+            <p class="eyebrow">Care workspace</p>
+            <h1 id="dashboardName">Your health dashboard</h1>
+            <p id="dashboardEmail">Choose a specialist, request a visit, and track updates from one place.</p>
+          </div>
+          <div class="header-actions">
+            <button class="secondary-button" id="dashboardRefreshButton" type="button">Refresh</button>
+          </div>
+        </header>
+
+        <section class="dashboard-tab" data-dashboard-panel="home">
+          <div class="dashboard-grid">
+            <article class="stat-card">
+              <span>Specialists ready to book</span>
+              <strong id="dashboardDoctorCount">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Visit requests</span>
+              <strong id="dashboardAppointmentCount">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Care updates</span>
+              <strong id="dashboardNotificationCount">0</strong>
+            </article>
+          </div>
+
+          <section class="home-layout">
+            <article class="work-card">
+              <div class="section-heading compact">
+                <div>
+                  <p class="eyebrow">Quick booking</p>
+                  <h2 id="homePrimaryTitle">Start with these specialists</h2>
+                </div>
+              </div>
+              <div class="compact-doctor-list" id="dashboardDoctorGrid"></div>
+            </article>
+
+            <article class="work-card">
+              <div class="section-heading compact">
+                <div>
+                  <p class="eyebrow">Activity</p>
+                  <h2 id="homeSecondaryTitle">What needs your attention</h2>
+                </div>
+              </div>
+              <div class="activity-list" id="dashboardNotifications"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="doctors">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Doctor directory</p>
+              <h2>Find the right specialist</h2>
+            </div>
+          </div>
+          <div class="doctor-grid" id="dashboardAllDoctors"></div>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="appointments">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Appointments</p>
+              <h2>Your visit requests</h2>
+            </div>
+          </div>
+          <div class="activity-list appointments-list" id="dashboardAppointments"></div>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="notifications">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Care inbox</p>
+              <h2>Updates and reminders</h2>
+            </div>
+          </div>
+          <div class="activity-list" id="allNotifications"></div>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="profile">
+          <article class="work-card profile-card">
+            <p class="eyebrow">Profile</p>
+            <h2 id="profileName">Patient</h2>
+            <dl>
+              <div>
+                <dt>Email</dt>
+                <dd id="profileEmail">-</dd>
+              </div>
+              <div>
+                <dt>Phone</dt>
+                <dd id="profilePhone">-</dd>
+              </div>
+              <div>
+                <dt>Account</dt>
+                <dd>Verified</dd>
+              </div>
+            </dl>
+          </article>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="practitioner">
+          <article class="work-card profile-card">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Practitioner verification</p>
+                <h2>Apply to receive patients</h2>
+              </div>
+              <span class="status-pill status-pending" id="practitionerStatus">Not applied</span>
+            </div>
+            <form class="practitioner-form" id="practitionerForm">
+              <div class="form-grid">
+                <label>
+                  First name
+                  <input name="firstName" autocomplete="given-name" required />
+                </label>
+                <label>
+                  Last name
+                  <input name="lastName" autocomplete="family-name" required />
+                </label>
+                <label>
+                  Phone
+                  <input name="phoneNumber" autocomplete="tel" required />
+                </label>
+                <label>
+                  Cadre
+                  <select name="practitionerCadre" required>
+                    <option value="doctor">Doctor</option>
+                    <option value="nurse">Nurse</option>
+                    <option value="clinical-officer">Clinical officer</option>
+                    <option value="dentist">Dentist</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label>
+                  Regulator
+                  <select name="regulator" required>
+                    <option value="KMPDC">KMPDC</option>
+                    <option value="NCK">NCK</option>
+                    <option value="COC">COC</option>
+                    <option value="HWR">HWR</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
+                <label>
+                  Registration number
+                  <input name="registrationNumber" placeholder="e.g. A12345" required />
+                </label>
+                <label>
+                  Specialty
+                  <input name="specialization" placeholder="Family Medicine" required />
+                </label>
+                <label>
+                  Experience
+                  <input name="experience" placeholder="8 years" required />
+                </label>
+                <label>
+                  Consultation fee
+                  <input name="consultationFees" type="number" min="0" required />
+                </label>
+                <label>
+                  Working hours
+                  <input name="timings" placeholder="09:00 - 17:00" required />
+                </label>
+                <label class="wide">
+                  Clinic address
+                  <input name="address" required />
+                </label>
+                <label class="wide">
+                  Website
+                  <input name="website" placeholder="Optional" />
+                </label>
+              </div>
+              <button class="primary-button full" type="submit">Submit for manual verification</button>
+            </form>
+          </article>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="admin">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Manual verification</p>
+              <h2>Practitioner applications</h2>
+            </div>
+          </div>
+          <div class="review-list" id="adminReviewList"></div>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="analytics">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Analytics</p>
+              <h2>Usage and verification trends</h2>
+            </div>
+          </div>
+          <div class="dashboard-grid">
+            <article class="stat-card">
+              <span>Total users</span>
+              <strong id="adminUserCount">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Logged in today</span>
+              <strong id="adminPendingCount">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Verified practitioners</span>
+              <strong id="adminVerifiedCount">0</strong>
+            </article>
+          </div>
+          <article class="work-card">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Account activity</p>
+                <h2>New users and logins</h2>
+              </div>
+            </div>
+            <div class="usage-chart" id="adminUsageChart"></div>
+          </article>
+          <article class="work-card analytics-card">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Credential outcomes</p>
+                <h2>Practitioner verification pipeline</h2>
+              </div>
+            </div>
+            <div class="activity-list" id="adminAnalyticsList"></div>
+          </article>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="monitoring">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Monitoring</p>
+              <h2>Operational queues</h2>
+            </div>
+          </div>
+          <div class="activity-list" id="adminMonitoringList"></div>
+        </section>
+
+        <section class="dashboard-tab hidden" data-dashboard-panel="users">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Users</p>
+              <h2>Registered accounts</h2>
+            </div>
+          </div>
+          <div class="review-list" id="adminUsersList"></div>
+        </section>
+      </main>
+    </section>
+
+    <dialog class="booking-modal" id="bookingModal">
+      <form method="dialog" class="booking-card" id="bookingForm">
+        <button class="icon-button close-button" id="closeBooking" aria-label="Close booking form" type="button">x</button>
+        <p class="eyebrow">Appointment request</p>
+        <h2 id="bookingTitle">Book appointment</h2>
+        <div class="form-grid">
+          <label>
+            Date
+            <input name="date" type="date" required />
+          </label>
+          <label>
+            Time
+            <input name="time" type="time" required />
+          </label>
+          <label class="wide">
+            Reason for visit
+            <textarea name="reason" rows="4" placeholder="Briefly describe what you need help with"></textarea>
+          </label>
+        </div>
+        <button class="primary-button full" type="submit">Send request</button>
+        <p class="form-status" id="bookingStatus" role="status"></p>
+      </form>
+    </dialog>
+
+    <dialog class="booking-modal" id="userModal">
+      <div class="booking-card user-detail-card">
+        <button class="icon-button close-button" id="closeUserModal" aria-label="Close user details" type="button">x</button>
+        <div class="user-detail-header">
+          <span class="avatar large" id="userModalAvatar">U</span>
+          <div>
+            <p class="eyebrow">User details</p>
+            <h2 id="userModalName">User</h2>
+            <p id="userModalEmail">-</p>
+          </div>
+        </div>
+        <dl class="detail-list">
+          <div>
+            <dt>Phone</dt>
+            <dd id="userModalPhone">-</dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd id="userModalRole">-</dd>
+          </div>
+          <div>
+            <dt>Email status</dt>
+            <dd id="userModalVerified">-</dd>
+          </div>
+          <div>
+            <dt>Account status</dt>
+            <dd id="userModalActive">-</dd>
+          </div>
+          <div>
+            <dt>Last login</dt>
+            <dd id="userModalLastLogin">-</dd>
+          </div>
+          <div>
+            <dt>Login count</dt>
+            <dd id="userModalLoginCount">0</dd>
+          </div>
+        </dl>
+        <button class="primary-button full" id="toggleUserStatusButton" type="button">Deactivate user</button>
+      </div>
+    </dialog>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
