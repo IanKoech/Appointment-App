@@ -8,7 +8,10 @@ const userSchema = new mongoose.Schema(
         },
         email: {
             type: String,
-            required: true
+            required: true,
+            unique: true,
+            lowercase: true,
+            trim: true
         },
         phoneNumber: {
             type: String,
@@ -25,6 +28,29 @@ const userSchema = new mongoose.Schema(
         isAdmin: {
             type: Boolean,
             default: false
+        },
+        isActive: {
+            type: Boolean,
+            default: true,
+            index: true
+        },
+        lastLoginAt: {
+            type: Date
+        },
+        loginCount: {
+            type: Number,
+            default: 0
+        },
+        isVerified: {
+            type: Boolean,
+            default: false,
+            index: true
+        },
+        emailOtpHash: {
+            type: String
+        },
+        emailOtpExpiresAt: {
+            type: Date
         },
         seenNotifications: {
             type: Array,

@@ -1,14 +1,97 @@
 import express from "express";
 const router = express.Router();
-import axios from "axios";
-import bcrypt from "bcrypt";
+import { randomBytes, scrypt, timingSafeEqual } from "crypto";
+import { promisify } from "util";
 import jwt from "jsonwebtoken";
-import moment from "moment";
 import { Buffer } from "buffer";
 import User from "../models/userModel.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 import Doctor from "../models/doctorModel.js";
 import Appointment from "../models/appointmentModel.js";
+
+const scryptAsync = promisify(scrypt);
+const OTP_EXPIRY_MINUTES = 10;
+
+const hashPassword = async (password) => {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = await scryptAsync(password, salt, 64);
+  return `scrypt:${salt}:${derivedKey.toString("hex")}`;
+};
+
+const hashOtp = async (otp) => {
+  const derivedKey = await scryptAsync(otp, process.env.JWT_SECRET, 64);
+  return derivedKey.toString("hex");
+};
+
+const verifyOtp = async (otp, storedOtpHash) => {
+  if (!storedOtpHash) {
+    return false;
+  }
+
+  const derivedKey = await scryptAsync(otp, process.env.JWT_SECRET, 64);
+  return timingSafeEqual(Buffer.from(storedOtpHash, "hex"), derivedKey);
+};
+
+const verifyPassword = async (password, storedPassword) => {
+  if (!storedPassword?.startsWith("scrypt:")) {
+    return false;
+  }
+
+  const [, salt, key] = storedPassword.split(":");
+  const derivedKey = await scryptAsync(password, salt, 64);
+  return timingSafeEqual(Buffer.from(key, "hex"), derivedKey);
+};
+
+const timeToMinutes = (time) => {
+  const [hours, minutes] = String(time).split(":").map(Number);
+  return hours * 60 + minutes;
+};
+
+const createOtp = () => {
+  return String(Math.floor(100000 + Math.random() * 900000));
+};
+
+const sendVerificationEmail = async ({ email, name, otp }) => {
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`Email verification OTP for ${email}: ${otp}`);
+    return { delivered: false, fallback: true };
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: process.env.EMAIL_FROM || "CareSlot <onboarding@resend.dev>",
+      to: [email],
+      subject: "Verify your CareSlot account",
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #17212b;">
+          <h2>Verify your CareSlot account</h2>
+          <p>Hello ${name || "there"},</p>
+          <p>Use this code to finish creating your account:</p>
+          <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+          <p>This code expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
+        </div>
+      `,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.warn(`Resend email failed for ${email}: ${error}`);
+    console.log(`Email verification OTP for ${email}: ${otp}`);
+    return { delivered: false, fallback: true };
+  }
+
+  return { delivered: true, fallback: false };
+};
+
+/*
+M-Pesa integration is paused for now. Uncomment this block when payment
+collection is ready to be wired back into appointment booking.
 
 const consumerKey = process.env.MPESA_CONSUMER_KEY;
 const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
@@ -33,13 +116,9 @@ const generateAccessToken = async () => {
 
     if (response.ok) {
       const data = await response.json();
-      const token = data.access_token;
-      console.log("The token from the fucking response ::::", data);
-
-      console.log("Access Token Response:", token);
-      return token; // Return the access token
+      return data.access_token;
     } else {
-      console.log("error ", response);
+      throw new Error(`M-Pesa token request failed with status ${response.status}`);
     }
   } catch (error) {
     console.error(
@@ -51,17 +130,21 @@ const generateAccessToken = async () => {
 };
 router.post("/payment-request", async (req, res) => {
   try {
-    // const { phoneNumber, amount } = req.body;
+    const {
+      phoneNumber = process.env.MPESA_TEST_PHONE_NUMBER,
+      amount = 1,
+      accountReference = "AppointmentPayment",
+      transactionDesc = "Appointment booking payment",
+    } = req.body;
 
-    console.log("Log the entire request:::", req);
-    // if (!phoneNumber || !amount) {
-    //   return res
-    //     .status(400)
-    //     .json({ error: "Phone number and amount are required" });
-    // }
+    if (!phoneNumber || !amount || !process.env.MPESA_CALLBACK_URL) {
+      return res.status(400).json({
+        success: false,
+        error: "Phone number, amount, and MPESA_CALLBACK_URL are required",
+      });
+    }
 
     const accessToken = await generateAccessToken();
-    console.log("Access token in the route :", accessToken);
     const timestamp = new Date()
       .toISOString()
       .replace(/[-:T]/g, "")
@@ -75,13 +158,13 @@ router.post("/payment-request", async (req, res) => {
       Password: password,
       Timestamp: timestamp,
       TransactionType: "CustomerPayBillOnline",
-      Amount: 1,
-      PartyA: "254768548261",
+      Amount: Number(amount),
+      PartyA: phoneNumber,
       PartyB: businessShortCode,
-      PhoneNumber: "254768548261",
-      CallBackURL: "https://8546-41-139-250-173.ngrok-free.app",
-      AccountReference: "TestPayment",
-      TransactionDesc: "Payment for order #123",
+      PhoneNumber: phoneNumber,
+      CallBackURL: process.env.MPESA_CALLBACK_URL,
+      AccountReference: accountReference,
+      TransactionDesc: transactionDesc,
     };
 
     const stkResponse = await fetch(
@@ -96,45 +179,144 @@ router.post("/payment-request", async (req, res) => {
       }
     );
 
-    const responseText = await stkResponse.text();
+    const responseData = await stkResponse.json();
 
     if (stkResponse.ok) {
-      console.log("STK Push Response:", responseText);
+      res.status(200).json({ success: true, data: responseData });
     } else {
-      console.error("error in stkresponse",responseText)
-    } 
-
-    const responseData = await stkResponse.json();
-    res.json(responseData);
+      res.status(stkResponse.status).json({ success: false, data: responseData });
+    }
   } catch (error) {
     console.error("STK Push Error:", error.message);
-    res.status(500).json({ error: "STK Push failed" });
+    res.status(500).json({ success: false, error: "STK Push failed" });
   }
 });
-
+*/
 
 
 router.post("/register", async (req, res) => {
   try {
-    const userExists = await User.findOne({ email: req.body.email });
+    const email = req.body.email?.toLowerCase().trim();
+    const userExists = await User.findOne({ email });
 
-    if (userExists) {
+    if (userExists?.isVerified) {
       return res
         .status(400)
         .send({ message: "User already exists", success: false });
     }
+
     const password = req.body.password;
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const otp = createOtp();
+    const emailOtpHash = await hashOtp(otp);
+    const emailOtpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-    req.body.password = hashedPassword;
+    const userData = {
+      ...req.body,
+      email,
+      password: await hashPassword(password),
+      isVerified: false,
+      emailOtpHash,
+      emailOtpExpiresAt,
+    };
 
-    const newUser = new User(req.body);
+    const user = userExists
+      ? await User.findByIdAndUpdate(userExists._id, userData, { new: true })
+      : await new User(userData).save();
 
-    await newUser.save(); //saves document in mongodb
-    res.status(200).send({ message: "User created succefully", success: true });
+    const emailResult = await sendVerificationEmail({ email: user.email, name: user.name, otp });
+
+    res.status(200).send({
+      message: emailResult.delivered
+        ? "Verification code sent to your email"
+        : "Verification code created. Check the server terminal for the OTP.",
+      success: true,
+      data: { email: user.email, needsVerification: true },
+    });
   } catch (error) {
+    console.log("Registration error:", error);
     res.status(500).send({ message: "Error creating user", success: false });
+  }
+});
+
+router.post("/verify-email-otp", async (req, res) => {
+  try {
+    const email = req.body.email?.toLowerCase().trim();
+    const otp = String(req.body.otp || "").trim();
+
+    if (!email || !otp) {
+      return res.status(400).send({
+        message: "Email and verification code are required",
+        success: false,
+      });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).send({ message: "User does not exist", success: false });
+    }
+
+    if (user.isVerified) {
+      return res.status(200).send({ message: "Account is already verified", success: true });
+    }
+
+    if (!user.emailOtpExpiresAt || user.emailOtpExpiresAt < new Date()) {
+      return res.status(400).send({ message: "Verification code has expired", success: false });
+    }
+
+    const isMatch = await verifyOtp(otp, user.emailOtpHash);
+    if (!isMatch) {
+      return res.status(400).send({ message: "Verification code is incorrect", success: false });
+    }
+
+    user.isVerified = true;
+    user.emailOtpHash = undefined;
+    user.emailOtpExpiresAt = undefined;
+    await user.save();
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1d",
+    });
+
+    res.status(200).send({
+      message: "Email verified successfully",
+      success: true,
+      data: token,
+    });
+  } catch (error) {
+    console.log("OTP verification error:", error);
+    res.status(500).send({ message: "Error verifying email", success: false });
+  }
+});
+
+router.post("/resend-email-otp", async (req, res) => {
+  try {
+    const email = req.body.email?.toLowerCase().trim();
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).send({ message: "User does not exist", success: false });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).send({ message: "Account is already verified", success: false });
+    }
+
+    const otp = createOtp();
+    user.emailOtpHash = await hashOtp(otp);
+    user.emailOtpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    await user.save();
+
+    const emailResult = await sendVerificationEmail({ email: user.email, name: user.name, otp });
+
+    res.status(200).send({
+      message: emailResult.delivered
+        ? "Verification code resent"
+        : "Verification code recreated. Check the server terminal for the OTP.",
+      success: true,
+    });
+  } catch (error) {
+    console.log("Resend OTP error:", error);
+    res.status(500).send({ message: "Error resending verification code", success: false });
   }
 });
 
@@ -146,13 +328,28 @@ router.post("/login", async (req, res) => {
         .status(404)
         .send({ message: "User does not exist", success: false });
     }
-    const isMatch = await bcrypt.compare(req.body.password, user.password); //compares encrypted password
-    console.log(isMatch);
+    if (!user.isActive) {
+      return res.status(403).send({
+        message: "This account has been deactivated. Contact support.",
+        success: false,
+      });
+    }
+    if (!user.isVerified) {
+      return res.status(403).send({
+        message: "Please verify your email before logging in",
+        success: false,
+        data: { needsVerification: true, email: user.email },
+      });
+    }
+    const isMatch = await verifyPassword(req.body.password, user.password);
     if (!isMatch) {
       res
         .status(200)
         .send({ message: "Password is incorrect", success: false });
     } else {
+      user.lastLoginAt = new Date();
+      user.loginCount = (user.loginCount || 0) + 1;
+      await user.save();
       const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
         expiresIn: "1d",
       });
@@ -168,17 +365,13 @@ router.post("/login", async (req, res) => {
 
 router.post("/get-user-by-id", authMiddleware, async (req, res) => {
   try {
-    const user = await User.findOne({ _id: req.body.userId });
-    user.password = undefined;
-    console.log(user);
+    const user = await User.findOne({ _id: req.body.userId }).select("-password");
     if (!user) {
-      req.status(404).send({ message: "User does not exist", success: false });
+      res.status(404).send({ message: "User does not exist", success: false });
     } else {
       res.status(200).send({
         success: true,
-        data: {
-          ...user,
-        },
+        data: user,
       });
     }
   } catch (error) {
@@ -190,10 +383,11 @@ router.post("/get-user-by-id", authMiddleware, async (req, res) => {
 
 router.post("/update-user-profile", authMiddleware, async (req, res) => {
   try {
-    const password = req.body.password;
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    req.body.password = hashedPassword;
+    if (req.body.password) {
+      req.body.password = await hashPassword(req.body.password);
+    } else {
+      delete req.body.password;
+    }
 
     const updatedUser = await User.findOneAndUpdate(
       {
@@ -207,7 +401,6 @@ router.post("/update-user-profile", authMiddleware, async (req, res) => {
       message: "User profile updated successfully",
       data: updatedUser,
     });
-    console.log("Upated user details : ", updatedUser);
   } catch (error) {
     console.log("Update profile error is : ", error);
     res.status(500).send({
@@ -220,10 +413,44 @@ router.post("/update-user-profile", authMiddleware, async (req, res) => {
 
 router.post("/apply-doctor-account", authMiddleware, async (req, res) => {
   try {
+    const requiredFields = [
+      "firstName",
+      "lastName",
+      "phoneNumber",
+      "address",
+      "specialization",
+      "experience",
+      "consultationFees",
+      "timings",
+      "practitionerCadre",
+      "regulator",
+      "registrationNumber",
+    ];
+    const missingField = requiredFields.find((field) => !req.body[field]);
+    if (missingField) {
+      return res.status(400).send({
+        success: false,
+        message: `${missingField} is required`,
+      });
+    }
+
+    const existingApplication = await Doctor.findOne({ userId: req.body.userId });
+    if (existingApplication) {
+      return res.status(400).send({
+        success: false,
+        message: "You already have a practitioner application on file",
+      });
+    }
+
     const newDoctor = new Doctor({ ...req.body, status: "pending" });
     await newDoctor.save();
     const adminUser = await User.findOne({ isAdmin: true });
-    console.log("Showing new doctor ", newDoctor);
+    if (!adminUser) {
+      return res.status(200).send({
+        success: true,
+        message: "Doctor account applied successfully",
+      });
+    }
 
     const unseenNotifications = adminUser.unseenNotifications;
     unseenNotifications.push({
@@ -254,6 +481,9 @@ router.post(
   async (req, res) => {
     try {
       const user = await User.findOne({ _id: req.body.userId });
+      if (!user) {
+        return res.status(404).send({ message: "User not found", success: false });
+      }
       const unseenNotifications = user._doc.unseenNotifications;
       const seenNotifications = user._doc.seenNotifications;
       seenNotifications.push(...unseenNotifications);
@@ -278,7 +508,9 @@ router.post(
 router.post("/delete-all-notifications", authMiddleware, async (req, res) => {
   try {
     const user = await User.findOne({ _id: req.body.userId });
-    const unseenNotifications = user._doc.unseenNotifications;
+    if (!user) {
+      return res.status(404).send({ message: "User not found", success: false });
+    }
     user.seenNotifications = [];
     user.unseenNotifications = [];
 
@@ -298,7 +530,7 @@ router.post("/delete-all-notifications", authMiddleware, async (req, res) => {
 
 router.get("/get-all-approved-doctors", async (req, res) => {
   try {
-    const doctors = await Doctor.find({ status: "approved" });
+    const doctors = await Doctor.find({ status: "verified" }).sort({ createdAt: -1 });
     res.status(200).send({
       message: "Doctors fetched successfully",
       success: true,
@@ -318,14 +550,20 @@ router.post("/book-appointment", authMiddleware, async (req, res) => {
     req.body.status = "pending";
     const newAppointment = new Appointment(req.body);
     await newAppointment.save();
-    //pushing notification to doctor based on his userid
-    const user = await User.findOne({ _id: req.body.doctorInfo.userId });
-    user.unseenNotifications.push({
-      type: "new-appointment-request",
-      message: `${req.body.userInfo._doc.name} has sent an appointment request `,
-      onClickPath: "/doctor/appointments",
-    });
-    await user.save();
+    const doctorUserId = req.body.doctorInfo?.userId;
+    const patientName = req.body.userInfo?.name || "A patient";
+
+    if (doctorUserId) {
+      const user = await User.findOne({ _id: doctorUserId });
+      if (user) {
+        user.unseenNotifications.push({
+          type: "new-appointment-request",
+          message: `${patientName} has sent an appointment request`,
+          onClickPath: "/doctor/appointments",
+        });
+        await user.save();
+      }
+    }
     res.status(200).send({
       message: "Appointment booked successfully",
       success: true,
@@ -340,20 +578,19 @@ router.post("/book-appointment", authMiddleware, async (req, res) => {
   }
 });
 
-router.post("/check-booking-avilability", authMiddleware, async (req, res) => {
+router.post(["/check-booking-availability", "/check-booking-avilability"], authMiddleware, async (req, res) => {
   try {
-    const date = moment(req.body.date, "DD-MM-YYYY").toISOString();
-    const fromTime = moment(req.body.time, "HH:mm")
-      .subtract(1, "hours")
-      .toISOString();
-    const toTime = moment(req.body.time, "HH:mm").add(1, "hours").toISOString();
+    const { date, time } = req.body;
     const doctorId = req.body.doctorId;
+    const requestedTime = timeToMinutes(time);
     const appointments = await Appointment.find({
       doctorId,
       date,
-      time: { $gte: fromTime, $lte: toTime },
     });
-    if (appointments.length > 0) {
+    const hasConflict = appointments.some((appointment) => {
+      return Math.abs(timeToMinutes(appointment.time) - requestedTime) <= 60;
+    });
+    if (hasConflict) {
       return res.status(200).send({
         message: "Appointments not available",
         success: false,

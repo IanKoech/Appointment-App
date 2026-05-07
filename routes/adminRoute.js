@@ -23,7 +23,7 @@ router.get("/get-all-doctors", async (req, res) => {
 
 router.get("/get-all-users", async (req, res) => {
   try {
-    const users = await User.find({});
+    const users = await User.find({}).select("-password");
     res.status(200).send({
       message: "Users fetched successfully",
       success: true,
@@ -38,23 +38,93 @@ router.get("/get-all-users", async (req, res) => {
   }
 });
 
+router.post("/update-user-status", authMiddleware, async (req, res) => {
+  try {
+    const { targetUserId, isActive } = req.body;
+    if (typeof isActive !== "boolean") {
+      return res.status(400).send({
+        message: "isActive must be true or false",
+        success: false,
+      });
+    }
+
+    if (targetUserId === req.body.userId && !isActive) {
+      return res.status(400).send({
+        message: "You cannot deactivate your own admin account",
+        success: false,
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      targetUserId,
+      { isActive },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).send({
+        message: "User not found",
+        success: false,
+      });
+    }
+
+    res.status(200).send({
+      message: isActive ? "User reactivated" : "User deactivated",
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      message: "Error updating user status",
+      success: false,
+    });
+  }
+});
+
 router.post(
   "/change-doctor-account-status",
   authMiddleware,
   async (req, res) => {
     try {
-      const { doctorId, status, userId } = req.body;
-      const doctor = await Doctor.findByIdAndUpdate(doctorId, { status });
-      console.log(doctor);
+      const { doctorId, status, verificationNotes } = req.body;
+      const allowedStatuses = ["pending", "verified", "rejected", "expired"];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).send({
+          message: "Invalid practitioner verification status",
+          success: false,
+        });
+      }
+
+      const update = {
+        status,
+        verificationNotes: verificationNotes || "",
+        verifiedAt: status === "verified" ? new Date() : undefined,
+        verifiedBy: req.body.userId,
+      };
+      const doctor = await Doctor.findByIdAndUpdate(doctorId, update, { new: true });
+      if (!doctor) {
+        return res.status(404).send({
+          message: "Doctor not found",
+          success: false,
+        });
+      }
       const user = await User.findOne({ _id: doctor.userId });
+      if (!user) {
+        return res.status(404).send({
+          message: "Doctor user not found",
+          success: false,
+        });
+      }
       const unseenNotifications = user.unseenNotifications; 
       unseenNotifications.push({
         type: "new-doctor-request-changed",
-        message: `Your doctor account status changed to ${status}`,
+        message: `Your practitioner verification status changed to ${status}`,
         onClickPath: "/notifications",
       });
 
-      user.isDoctor = status === 'approved' ? true : false;
+      user.isDoctor = status === 'verified' ? true : false;
+      user.unseenNotifications = unseenNotifications;
       await user.save();
 
       res.status(200).send({
