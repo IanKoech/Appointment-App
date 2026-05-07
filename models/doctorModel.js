@@ -4,7 +4,8 @@ const doctorSchema = new mongoose.Schema(
     {
         userId: {
             type: String,
-            required: true
+            required: true,
+            index: true
         },
         firstName: {
             type: String,
@@ -20,7 +21,7 @@ const doctorSchema = new mongoose.Schema(
         },
         website: {
             type: String,
-            required: true
+            default: ''
         },
         address: {
             type: String,
@@ -32,7 +33,7 @@ const doctorSchema = new mongoose.Schema(
         },
         experience: {
             type: String,
-            requried: true
+            required: true
         },
         consultationFees: {
             type: Number,
@@ -40,15 +41,45 @@ const doctorSchema = new mongoose.Schema(
         },
         tillNumber: {
             type: Number,
-            required: true,
+            default: 174379,
        },
         timings: {
             type: Array,
             required: true
         },
+        practitionerCadre: {
+            type: String,
+            enum: ['doctor', 'nurse', 'clinical-officer', 'dentist', 'other'],
+            required: true,
+            index: true
+        },
+        regulator: {
+            type: String,
+            enum: ['KMPDC', 'NCK', 'COC', 'HWR', 'OTHER'],
+            required: true,
+            index: true
+        },
+        registrationNumber: {
+            type: String,
+            required: true,
+            trim: true,
+            index: true
+        },
+        verificationNotes: {
+            type: String,
+            default: ''
+        },
+        verifiedAt: {
+            type: Date
+        },
+        verifiedBy: {
+            type: String
+        },
         status: {
             type: String,
-            default: 'pending'
+            enum: ['pending', 'verified', 'rejected', 'expired'],
+            default: 'pending',
+            index: true
         }
     },
     {

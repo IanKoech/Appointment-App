@@ -1,14 +1,15 @@
 import express from "express";
 const router = express.Router();
 import Doctor from "../models/doctorModel.js";
+import Appointment from "../models/appointmentModel.js";
 import authMiddleware from "../middlewares/authMiddleware.js";
 
 router.post("/get-doctor-info-by-user-id", authMiddleware, async (req, res) => {
   try {
-    const doctor = await Doctor.findOne({ _id: req.body.userId });
-    res.status.send({
+    const doctor = await Doctor.findOne({ userId: req.body.userId });
+    res.status(200).send({
       success: true,
-      message: "Doctor info fetched successful",
+      message: "Doctor info fetched successfully",
       data: doctor,
     });
   } catch (error) {
@@ -57,7 +58,12 @@ router.get(
   async (req, res) => {
     try {
       const doctor = await Doctor.findOne({ userId: req.user.userId });
-      console.log('Check for request content :',req);
+      if (!doctor) {
+        return res.status(404).send({
+          message: "Doctor profile not found",
+          success: false,
+        });
+      }
       const appointments = await Appointment.find({ doctorId: doctor._id });
       res.status(200).send({
         message: "Appointments fetched successfully",
