@@ -1,6 +1,6 @@
-// const mongoose = require('mongoose');
 import mongoose from "mongoose";
-mongoose.connect(process.env.MONGO_URL);
+
+mongoose.set("bufferCommands", false);
 
 const connection = mongoose.connection;
 
@@ -12,6 +12,12 @@ connection.on('error', (error)=>{
     console.log("Error :",error);
 })
 
-// module.exports = mongoose;
+const connectDB = async () => {
+    if (!process.env.MONGO_URL) {
+        throw new Error('MONGO_URL is not set.');
+    }
 
-export default mongoose;
+    await mongoose.connect(process.env.MONGO_URL);
+};
+
+export default connectDB;
